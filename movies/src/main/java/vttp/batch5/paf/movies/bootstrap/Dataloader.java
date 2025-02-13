@@ -36,6 +36,7 @@ public class Dataloader implements CommandLineRunner {
     public void run(String... args) {
         System.out.println("Reading zip...");
         List<Movie> movies = new ArrayList<>();
+        int totalProcessed = 0;
         SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
         Date afterDate;
         try {
@@ -44,74 +45,99 @@ public class Dataloader implements CommandLineRunner {
             Path p = Paths.get("../data/movies_post_2010.zip");
             System.out.println("reading from:" + p.toAbsolutePath());
 
-            FileInputStream fis = new FileInputStream(p.toFile());
-            ZipInputStream zis = new ZipInputStream(fis);
-            zis.getNextEntry();
-            BufferedReader br = new BufferedReader(new InputStreamReader(zis));
-            String line;
+            try (
+                    FileInputStream fis = new FileInputStream(p.toFile());
+                    ZipInputStream zis = new ZipInputStream(fis);
+                    BufferedReader br = new BufferedReader(
+                            new InputStreamReader(zis))) {
+                zis.getNextEntry(); 
 
-            while ((line = br.readLine()) != null) {
-                Date releaseDate;
-                try (
-                        JsonReader jsonReader = Json.createReader(
-                                new StringReader(line))) {
-                    JsonObject json = jsonReader.readObject();
-                    try {
-                        releaseDate = dateFormat.parse(
+                String line;
+                while ((line = br.readLine()) != null) {
+                    try (
+                            JsonReader jsonReader = Json.createReader(
+                                    new StringReader(line))) {
+                        JsonObject json = jsonReader.readObject();
+
+                        // Parse release date
+                        Date releaseDate = dateFormat.parse(
                                 json.getString("release_date", ""));
-                        if (releaseDate.before(afterDate))
-                            continue; // skip before date
-                    } catch (Exception e) {
-                        continue; // skip error
-                    }
+                        if (releaseDate.before(afterDate)) {
+                            continue;
+                        }
 
-                    Movie movie = new Movie(
-                            json.getString("imdb_id", "0"),
+                        Movie movie = new Movie(
+                            json.getString("title", ""),
                             Float.parseFloat(json.getString("vote_average", "0")),
                             json.getInt("vote_count", 0),
+                            json.getString("status", ""),
                             releaseDate,
-                            Float.parseFloat(json.getString("revenue", "0")),
-                            Float.parseFloat(json.getString("budget", "0")),
-                            json.getInt("runtime", 0));
-                    movies.add(movie);
+                            Long.parseLong(json.getString("revenue", "0")),
+                            json.getInt("runtime", 0),
+                            Long.parseLong(json.getString("budget", "0")),
+                            json.getString("imdb_id", ""),
+                            json.getString("original_language", ""),
+                            json.getString("overview", ""),
+                            Float.parseFloat(json.getString("popularity", "0")),
+                            json.getString("tagline", ""),
+                            json.getString("genres", ""),
+                            json.getString("spoken_languages", ""),
+                            json.getString("casts", ""),
+                            json.getString("director", ""),
+                            Float.parseFloat(json.getString("imdb_rating", "0")),
+                            json.getInt("imdb_votes", 0),
+                            json.getString("poster_path", "")
+                        );
+                                
+                        movies.add(movie);
 
-                    if (movies.size() == 25) {
-                        processBatch(movies);
-                        movies = new ArrayList<>();
+                        if (movies.size() == 25) {
+                            totalProcessed += 25;
+                            System.out.println("adding docs, current count:" + totalProcessed);
+                            try {
+                                mySQLRepo.batchInsertMovies(movies);
+                                System.out.println("sql added");
+                                mongoRepo.batchInsertMovies(movies);
+                                System.out.println("mongo added");
+                            } catch (Exception e) {
+                                List<String> movieIds = new ArrayList<>();
+                                for (Movie in : movies) {
+                                    String imdbId = in.getImdbId();
+                                    movieIds.add(imdbId);
+                                }
+                                // String errorMessage = e.getMessage();
+                                // mongoRepo.logError(movieIds, errorMessage);
+                            }
+                            System.out.println("new count: " + totalProcessed);
+                            movies = new ArrayList<>();
+                        }
+                    } catch (Exception e) {
+                        System.out.println(
+                                "Error processing JSON line: " + e.getMessage());
                     }
-                } catch (Exception e) {
-                    System.out.println(
-                            "Error processing JSON: " + e.getMessage());
                 }
             }
-
-            // Process any remaining movies
-            if (!movies.isEmpty()) {
-                processBatch(movies);
-            }
-
-            br.close();
-            zis.closeEntry();
-            zis.close();
-            fis.close();
         } catch (Exception e) {
             e.printStackTrace();
         }
-    }
-
-    private void processBatch(List<Movie> movies) {
-        try {
-            mySQLRepo.batchInsertMovies(movies);
-            mongoRepo.batchInsertMovies(movies);
-        } catch (Exception e) {
-            List<String> movieIds = new ArrayList<>();
-            for (Movie movie : movies) {
-                String imdbId = movie.getImdbId();
-                movieIds.add(imdbId);
+        if (!movies.isEmpty()) {
+            try {
+                mySQLRepo.batchInsertMovies(movies);
+                System.out.println("sql added");
+                mongoRepo.batchInsertMovies(movies);
+                System.out.println("mongo added");
+            } catch (Exception e) {
+                List<String> movieIds = new ArrayList<>();
+                for (Movie in : movies) {
+                    String imdbId = in.getImdbId();
+                    movieIds.add(imdbId);
+                }
+                String errorMessage = e.getMessage();
+                mongoRepo.logError(movieIds, errorMessage);
             }
-            String[] idArray = movieIds.toArray(new String[0]);
-            String errorMessage = e.getMessage();   
-            mongoRepo.logError(idArray, errorMessage);
+            totalProcessed += movies.size();
+            System.out.println("Final batch: Processed total of " + totalProcessed + " movies");
         }
     }
 }
+    
