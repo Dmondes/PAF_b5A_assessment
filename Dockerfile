@@ -1,4 +1,4 @@
-FROM openjdk:22-jdk AS builder
+FROM openjdk:23-jdk AS builder
 
 ARG COMPILE_DIR=/compiledir
 WORKDIR ${COMPILE_DIR}
@@ -12,12 +12,12 @@ COPY movies/.mvn .mvn
 
 #Build app
 RUN chmod a+x ./mvnw
-RUN ./mvnw clean package -Dmaven.skip.tests=true
+RUN ./mvnw clean package -DskipTests
 
 ENTRYPOINT ["java", "-jar", "target/movies-0.0.1-SNAPSHOT.jar"]
 
 # second stage Run time
-FROM openjdk:22-jdk
+FROM openjdk:23-jdk
 
 ARG WORK_DIR=/app
 WORKDIR ${WORK_DIR}
