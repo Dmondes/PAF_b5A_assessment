@@ -20,7 +20,8 @@ public class MovieService {
     // You may change the signature of this method by passing any number of parameters
     // and returning any type
     public List<String> getProlificDirectors(int limit) {
-        return mongoRepo.getDirectorStatistics(limit);
+        // return mongoRepo.getDirectorStatistics(limit);
+        return null;
     }
 
     // TODO: Task 4
