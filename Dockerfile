@@ -4,11 +4,7 @@ ARG COMPILE_DIR=/compiledir
 WORKDIR ${COMPILE_DIR}
 
 #Copy build files
-COPY movies/pom.xml .
-COPY movies/mvnw .
-COPY movies/mvnw.cmd .
-COPY movies/src src
-COPY movies/.mvn .mvn
+COPY movies/ .
 
 #Build app
 RUN chmod a+x ./mvnw
